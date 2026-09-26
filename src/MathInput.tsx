@@ -4,10 +4,7 @@ import {
   type HTMLAttributes,
   type RefAttributes,
 } from "react";
-import {
-  MathfieldElement,
-  type VirtualKeyboardLayout,
-} from "mathlive";
+import { MathfieldElement, type VirtualKeyboardLayout } from "mathlive";
 import { computeEngine } from "./latex";
 import "mathlive/fonts.css";
 import "mathlive/static.css";
@@ -158,16 +155,20 @@ export function KeyboardManager({
   polar = false,
   parametric = false,
   implicit = false,
+  ode = false,
+  odeOrder = 1,
 }: {
   desktopContainer: HTMLElement | null;
   polar?: boolean;
   parametric?: boolean;
   implicit?: boolean;
+  ode?: boolean;
+  odeOrder?: 1 | 2;
 }) {
   useEffect(() => {
     const keyboard = window.mathVirtualKeyboard;
     const configuredLayouts =
-      polar || parametric || implicit
+      polar || parametric || implicit || ode
         ? layouts.map((layout, i) =>
             i === 0 && "rows" in layout
               ? {
@@ -175,14 +176,53 @@ export function KeyboardManager({
                   rows: [
                     [
                       polar ? "\\theta" : parametric ? "t" : "x",
-                      polar ? "r" : implicit ? "y" : "x",
-                      implicit ? "=" : parametric ? "y" : "\\pi",
-                      ...layout.rows[0].slice(3),
+                      polar ? "r" : implicit || ode ? "y" : "x",
+                      implicit || ode ? "=" : parametric ? "y" : "\\pi",
+                      ...(ode
+                        ? [
+                            key(
+                              odeOrder === 2
+                                ? "\\frac{\\mathrm{d}^2y}{\\mathrm{d}x^2}"
+                                : "\\frac{\\mathrm{d}y}{\\mathrm{d}x}",
+                              odeOrder === 2
+                                ? "\\frac{\\mathrm{d}^2y}{\\mathrm{d}x^2}"
+                                : "\\frac{\\mathrm{d}y}{\\mathrm{d}x}",
+                              odeOrder === 2 ? "二阶导数" : "一阶导数 dy/dx",
+                            ),
+                          ]
+                        : layout.rows[0].slice(3)),
                     ],
                     ...layout.rows.slice(1),
                   ],
                 }
-              : layout,
+              : ode && i === 1 && "rows" in layout
+                ? {
+                    ...layout,
+                    rows: [
+                      [
+                        key(
+                          "\\frac{\\mathrm{d}y}{\\mathrm{d}x}",
+                          "\\frac{\\mathrm{d}y}{\\mathrm{d}x}",
+                          "一阶导数 dy/dx",
+                        ),
+                        key("y'", "y'", "一阶导数 y'"),
+                        key(
+                          odeOrder === 2
+                            ? "\\frac{\\mathrm{d}^2y}{\\mathrm{d}x^2}"
+                            : "\\frac{\\mathrm{d}x}{\\mathrm{d}y}",
+                          odeOrder === 2
+                            ? "\\frac{\\mathrm{d}^2y}{\\mathrm{d}x^2}"
+                            : "\\frac{\\mathrm{d}x}{\\mathrm{d}y}",
+                          odeOrder === 2 ? "二阶导数" : "一阶导数 dx/dy",
+                        ),
+                        odeOrder === 2
+                          ? key("y''", "y''", "二阶导数 y''")
+                          : "=",
+                      ],
+                      ...layout.rows,
+                    ],
+                  }
+                : layout,
           )
         : layouts;
     keyboard.layouts = configuredLayouts.map((layout, i) => {
@@ -216,7 +256,7 @@ export function KeyboardManager({
         ],
       };
     });
-  }, [polar, parametric, implicit]);
+  }, [polar, parametric, implicit, ode, odeOrder]);
   useEffect(() => {
     if (!desktopContainer) return;
     const keyboard = window.mathVirtualKeyboard;

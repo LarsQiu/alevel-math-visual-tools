@@ -6,6 +6,8 @@ import "./mobile.css";
 import "./layout.css";
 import "./workbench.css";
 import "./appearance.css";
+import "./ode.css";
+import "./ui.css";
 import { applyTheme, readTheme } from "./theme";
 
 applyTheme(readTheme());

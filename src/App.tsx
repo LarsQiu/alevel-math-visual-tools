@@ -31,6 +31,7 @@ import { ParameterControl } from "./ParameterControl";
 import { compilePolarEquation } from "./polarEquation";
 import { SidebarDivider } from "./SidebarDivider";
 import { useColorTheme } from "./useColorTheme";
+import { WorkspaceBrand } from "./WorkspaceBrand";
 import { curveColor, plotThemes } from "./theme";
 import { excludedParameters, finiteOpenPoints } from "./domainMarkers";
 import { samplePolarPoints, drawPolarSamples } from "./polarPoints";
@@ -44,14 +45,26 @@ import {
 } from "./cartesian";
 import "./cartesian.css";
 import { AnalysisTools, type AnalysisHandle } from "./AnalysisTools";
+import { OdeExpression } from "./OdeExpression";
+import {
+  DEFAULT_ODE_LATEX,
+  DEFAULT_SECOND_ORDER_LATEX,
+  EMPTY_ODE_STATE,
+  type OdeEntryState,
+} from "./odeLatex";
+import type { Point as OdePoint } from "./ode";
+import { buildOdeField } from "./odeField";
 type CoordinateMode = "cartesian" | "polar";
+type ExpressionKind = CartesianKind | "ode" | "ode2";
+const isOdeKind = (kind?: ExpressionKind) => kind === "ode" || kind === "ode2";
 type Expression = {
   id: number;
   value: string;
   left?: string;
   color: string;
   visible: boolean;
-  kind?: CartesianKind;
+  kind?: ExpressionKind;
+  ode?: OdeEntryState;
   tStart?: string;
   tEnd?: string;
 };
@@ -63,15 +76,35 @@ const palette = [
   "#7b7294",
   "#98705b",
 ];
-const initial = [
-  {
-    id: 1,
-    value: "a\\sin\\left(bx+c\\right)",
-    color: palette[0],
-    visible: true,
-  },
-  { id: 2, value: "0.25x^{2}-2", color: palette[1], visible: true },
-];
+const initialOdeKind =
+  new URLSearchParams(window.location.search).get("expression") === "ode2"
+    ? "ode2"
+    : "ode";
+const openOdeAtStart = ["ode", "ode2"].includes(
+  new URLSearchParams(window.location.search).get("expression") ?? "",
+);
+const initial: Expression[] = openOdeAtStart
+  ? [
+      {
+        id: 1,
+        value:
+          initialOdeKind === "ode2"
+            ? DEFAULT_SECOND_ORDER_LATEX
+            : DEFAULT_ODE_LATEX,
+        color: palette[0],
+        visible: true,
+        kind: initialOdeKind,
+      },
+    ]
+  : [
+      {
+        id: 1,
+        value: "a\\sin\\left(bx+c\\right)",
+        color: palette[0],
+        visible: true,
+      },
+      { id: 2, value: "0.25x^{2}-2", color: palette[1], visible: true },
+    ];
 export default function App() {
   const { theme, toggleTheme } = useColorTheme();
   const paint = plotThemes[theme];
@@ -81,10 +114,12 @@ export default function App() {
     "expressions" | "parameters" | "range" | "analysis"
   >("expressions");
   const polar = mode === "polar";
-  const [newExpressionKind, setNewExpressionKind] =
-    useState<CartesianKind>("explicit");
-  const [activeInputKind, setActiveInputKind] =
-    useState<CartesianKind>("explicit");
+  const [newExpressionKind, setNewExpressionKind] = useState<ExpressionKind>(
+    openOdeAtStart ? initialOdeKind : "explicit",
+  );
+  const [activeInputKind, setActiveInputKind] = useState<ExpressionKind>(
+    openOdeAtStart ? initialOdeKind : "explicit",
+  );
   const implicit = newExpressionKind === "implicit",
     parametric = newExpressionKind === "parametric";
   const chooseMobilePanel = (
@@ -186,6 +221,8 @@ export default function App() {
   const parsed = useMemo(
     () =>
       expressions.map((e) => {
+        if (!polar && isOdeKind(e.kind))
+          return { ...e, fn: null, parameterInterval: null, error: "" };
         try {
           const built = polar
             ? {
@@ -195,7 +232,7 @@ export default function App() {
                 ) as CompiledPlot,
                 parameterInterval: null,
               }
-            : compileCartesianEntry(e);
+            : compileCartesianEntry({ ...e, kind: e.kind as CartesianKind });
           return {
             ...e,
             ...built,
@@ -213,6 +250,27 @@ export default function App() {
     [expressions, polar],
   );
   const activeParams = new Set(parsed.flatMap((e) => e.fn?.params ?? []));
+  const odePlots = useMemo(
+    () =>
+      polar
+        ? []
+        : expressions.flatMap((entry) => {
+            if (
+              !isOdeKind(entry.kind) ||
+              !entry.visible ||
+              !entry.ode?.solution
+            )
+              return [];
+            return [
+              {
+                id: entry.id,
+                color: entry.color,
+                ...buildOdeField(entry.ode, view, size.w, size.h),
+              },
+            ];
+          }),
+    [expressions, polar, view, size],
+  );
   const pointExpression =
     parsed.find((e) => e.visible && e.id === pointExpressionId) ??
     parsed.find((e) => e.visible);
@@ -337,6 +395,56 @@ export default function App() {
       if (oy >= 0 && oy < h) ctx.fillText("x", w - 20, oy - 10);
       if (ox >= 0 && ox < w) ctx.fillText("y", ox + 10, 20);
     }
+    const drawOdeLine = (
+      line: OdePoint[],
+      color: string,
+      width: number,
+      alpha: number,
+      dash: number[] = [],
+    ) => {
+      if (line.length < 2) return;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.setLineDash(dash);
+      ctx.beginPath();
+      line.forEach(([x, y], index) =>
+        index
+          ? ctx.lineTo(ox + x * view.scale, oy - y * view.scale)
+          : ctx.moveTo(ox + x * view.scale, oy - y * view.scale),
+      );
+      ctx.stroke();
+      ctx.restore();
+    };
+    for (const ode of odePlots) {
+      for (const line of ode.family)
+        drawOdeLine(
+          line,
+          displayColor(ode.color),
+          1.15,
+          ode.selection.point ? 0.28 : 0.42,
+        );
+      for (const line of ode.nearby)
+        drawOdeLine(line, displayColor(ode.color), 1.45, 0.56);
+      for (const asymptote of ode.asymptotes) {
+        const x0 = view.x - w / (2 * view.scale),
+          x1 = view.x + w / (2 * view.scale);
+        const line: OdePoint[] =
+          asymptote.axis === "x"
+            ? [
+                [asymptote.value, view.y - h / (2 * view.scale)],
+                [asymptote.value, view.y + h / (2 * view.scale)],
+              ]
+            : [
+                [x0, (asymptote.slope ?? 0) * x0 + asymptote.value],
+                [x1, (asymptote.slope ?? 0) * x1 + asymptote.value],
+              ];
+        drawOdeLine(line, displayColor(ode.color), 2.6, 0.88, [10, 7]);
+      }
+    }
     for (const e of parsed) {
       if (!e.visible || !e.fn) continue;
       ctx.strokeStyle = displayColor(e.color);
@@ -445,6 +553,35 @@ export default function App() {
         }
       }
     }
+    for (const ode of odePlots) {
+      for (const line of ode.particular) {
+        drawOdeLine(line, paint.background, 6, 0.9);
+        drawOdeLine(line, displayColor(ode.color), 3.2, 1);
+      }
+      if (ode.selection.point) {
+        const [x, y] = ode.selection.point;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(ox + x * view.scale, oy - y * view.scale, 4.5, 0, 2 * Math.PI);
+        ctx.fillStyle = displayColor(ode.color);
+        ctx.fill();
+        ctx.strokeStyle = paint.background;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      }
+      for (const [x, y] of ode.singularities) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(ox + x * view.scale, oy - y * view.scale, 4.6, 0, 2 * Math.PI);
+        ctx.fillStyle = "#000000";
+        ctx.fill();
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = "#eef0eb";
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
     if (polar && pointsEnabled && pointExpression)
       drawPolarSamples(
         ctx,
@@ -487,6 +624,7 @@ export default function App() {
     pointTableExpanded,
     angleUnit,
     theme,
+    odePlots,
   ]);
   const zoom = (factor: number, px = size.w / 2, py = size.h / 2) =>
     setView((v) => {
@@ -558,7 +696,12 @@ export default function App() {
       ...es,
       {
         id,
-        value: "",
+        value:
+          !polar && isOdeKind(newExpressionKind)
+            ? newExpressionKind === "ode2"
+              ? DEFAULT_SECOND_ORDER_LATEX
+              : DEFAULT_ODE_LATEX
+            : "",
         kind: polar ? undefined : newExpressionKind,
         left: polar ? "r" : "",
         tStart: "0",
@@ -640,23 +783,13 @@ export default function App() {
         polar={polar}
         parametric={!polar && activeInputKind === "parametric"}
         implicit={!polar && activeInputKind === "implicit"}
+        ode={!polar && isOdeKind(activeInputKind)}
+        odeOrder={activeInputKind === "ode2" ? 2 : 1}
       />
       <main>
         <aside className="sidebar" id="control-panel">
           <div className="sidebar-brand">
-            <a
-              className="brand"
-              href="/"
-              aria-label="返回数学探索室首页"
-              title="返回数学探索室首页"
-            >
-              <span className="brand-icon">
-                m<span>·</span>
-              </span>
-              <span>
-                mathroom<span className="brand-sub">纯数探索 · 返回首页 ↗</span>
-              </span>
-            </a>
+            <WorkspaceBrand label="纯数探索" />
             <div className="brand-actions">
               <button
                 className="theme-toggle"
@@ -867,12 +1000,16 @@ export default function App() {
                       aria-label="添加表达式类型"
                       value={newExpressionKind}
                       onChange={(e) =>
-                        setNewExpressionKind(e.target.value as CartesianKind)
+                        setNewExpressionKind(e.target.value as ExpressionKind)
                       }
                     >
                       <option value="explicit">显函数</option>
                       <option value="implicit">隐函数</option>
                       <option value="parametric">参数方程</option>
+                      <option value="ode">一阶微分方程</option>
+                      <option value="ode2" title="二阶常系数微分方程">
+                        二阶常系数
+                      </option>
                     </select>
                   )}
                   <button
@@ -890,7 +1027,8 @@ export default function App() {
               <div className="expressions">
                 {parsed.map((e, i) => {
                   const implicit = !polar && e.kind === "implicit",
-                    parametric = !polar && e.kind === "parametric";
+                    parametric = !polar && e.kind === "parametric",
+                    ode = !polar && isOdeKind(e.kind);
                   return (
                     <div
                       className={`expression ${!e.visible ? "muted" : ""} ${e.error ? "invalid" : ""}`}
@@ -904,7 +1042,18 @@ export default function App() {
                       <div className="expression-top">
                         <span className="function-label">
                           <i />
-                          {`${polar ? "r" : implicit ? "F" : parametric ? "Γ" : "f"}${["₁", "₂", "₃", "₄", "₅", "₆"][i]}(${polar ? "θ" : implicit ? "x,y" : parametric ? "t" : "x"})`}
+                          {ode ? (
+                            <>
+                              <StaticMath value={`\\mathcal{E}_{${i + 1}}`} />
+                              <small>
+                                {e.kind === "ode2"
+                                  ? "二阶常系数微分方程"
+                                  : "一阶微分方程"}
+                              </small>
+                            </>
+                          ) : (
+                            `${polar ? "r" : implicit ? "F" : parametric ? "Γ" : "f"}${["₁", "₂", "₃", "₄", "₅", "₆"][i]}(${polar ? "θ" : implicit ? "x,y" : parametric ? "t" : "x"})`
+                          )}
                         </span>
                         <div className="row-actions">
                           <button
@@ -933,72 +1082,99 @@ export default function App() {
                           </button>
                         </div>
                       </div>
-                      {parametric && (
-                        <div className="formula-row parametric-formula">
-                          <span>x(t) =</span>
-                          <MathInput
-                            label={`参数方程 x ${i + 1}`}
-                            value={e.left ?? ""}
-                            onChange={(left) => update(e.id, { left })}
-                            onFocus={() => setActiveInputKind("parametric")}
-                          />
-                        </div>
-                      )}
-                      <div className="formula-row">
-                        {polar ? (
-                          <>
-                            <div className="polar-equation-left">
-                              <span
-                                className="polar-left-sizer"
-                                aria-hidden="true"
-                              >
-                                <StaticMath value={e.left ?? "r"} />
-                              </span>
+                      {ode ? (
+                        <OdeExpression
+                          index={i + 1}
+                          order={e.kind === "ode2" ? 2 : 1}
+                          value={e.value}
+                          state={e.ode ?? EMPTY_ODE_STATE}
+                          onValue={(value) =>
+                            update(e.id, {
+                              value,
+                              ode: {
+                                ...(e.ode ?? EMPTY_ODE_STATE),
+                                solution: null,
+                                error: "",
+                              },
+                            })
+                          }
+                          onState={(patch) =>
+                            update(e.id, {
+                              ode: { ...(e.ode ?? EMPTY_ODE_STATE), ...patch },
+                            })
+                          }
+                          onFocus={() => setActiveInputKind(e.kind ?? "ode")}
+                        />
+                      ) : (
+                        <>
+                          {parametric && (
+                            <div className="formula-row parametric-formula">
+                              <span>x(t) =</span>
                               <MathInput
-                                label={`极坐标左侧 ${i + 1}`}
-                                value={e.left ?? "r"}
+                                label={`参数方程 x ${i + 1}`}
+                                value={e.left ?? ""}
                                 onChange={(left) => update(e.id, { left })}
+                                onFocus={() => setActiveInputKind("parametric")}
                               />
                             </div>
-                            <span>=</span>
-                          </>
-                        ) : implicit ? null : (
-                          <span>{parametric ? "y(t)" : "y"} =</span>
-                        )}
-                        <MathInput
-                          label={
-                            parametric
-                              ? `参数方程 y ${i + 1}`
-                              : `表达式 ${i + 1}`
-                          }
-                          value={e.value}
-                          onChange={(value) => update(e.id, { value })}
-                          onFocus={() =>
-                            setActiveInputKind(e.kind ?? "explicit")
-                          }
-                        />
-                      </div>
-                      {parametric && (
-                        <div className="expression-t-range">
-                          <span>t</span>
-                          <input
-                            aria-label={`参数方程 ${i + 1} t 起点`}
-                            value={e.tStart ?? "0"}
-                            onChange={(event) =>
-                              update(e.id, { tStart: event.target.value })
-                            }
-                            placeholder="0"
-                          />
-                          <span>→</span>
-                          <input
-                            aria-label={`参数方程 ${i + 1} t 终点`}
-                            value={e.tEnd ?? "2π"}
-                            onChange={(event) =>
-                              update(e.id, { tEnd: event.target.value })
-                            }
-                            placeholder="2π"
-                          />
-                        </div>
+                          )}
+                          <div className="formula-row">
+                            {polar ? (
+                              <>
+                                <div className="polar-equation-left">
+                                  <span
+                                    className="polar-left-sizer"
+                                    aria-hidden="true"
+                                  >
+                                    <StaticMath value={e.left ?? "r"} />
+                                  </span>
+                                  <MathInput
+                                    label={`极坐标左侧 ${i + 1}`}
+                                    value={e.left ?? "r"}
+                                    onChange={(left) => update(e.id, { left })}
+                                  />
+                                </div>
+                                <span>=</span>
+                              </>
+                            ) : implicit ? null : (
+                              <span>{parametric ? "y(t)" : "y"} =</span>
+                            )}
+                            <MathInput
+                              label={
+                                parametric
+                                  ? `参数方程 y ${i + 1}`
+                                  : `表达式 ${i + 1}`
+                              }
+                              value={e.value}
+                              onChange={(value) => update(e.id, { value })}
+                              onFocus={() =>
+                                setActiveInputKind(e.kind ?? "explicit")
+                              }
+                            />
+                          </div>
+                          {parametric && (
+                            <div className="expression-t-range">
+                              <span>t</span>
+                              <input
+                                aria-label={`参数方程 ${i + 1} t 起点`}
+                                value={e.tStart ?? "0"}
+                                onChange={(event) =>
+                                  update(e.id, { tStart: event.target.value })
+                                }
+                                placeholder="0"
+                              />
+                              <span>→</span>
+                              <input
+                                aria-label={`参数方程 ${i + 1} t 终点`}
+                                value={e.tEnd ?? "2π"}
+                                onChange={(event) =>
+                                  update(e.id, { tEnd: event.target.value })
+                                }
+                                placeholder="2π"
+                              />
+                            </div>
+                          )}
+                        </>
                       )}
                       {e.error && (
                         <div className="error" role="status">
@@ -1035,13 +1211,21 @@ export default function App() {
                 ))}
                 {activeParams.size === 0 && (
                   <p className="empty-params">
-                    写入
-                    {polar || implicit || parametric
-                      ? " a、k、b 等参数"
-                      : "任意单字母参数，如 k、m、θ"}
-                    ，
-                    <br />
-                    这里会自动出现参数滑块。
+                    {!polar &&
+                    expressions.length > 0 &&
+                    expressions.every((entry) => isOdeKind(entry.kind)) ? (
+                      "微分方程的系数请填写数值。"
+                    ) : (
+                      <>
+                        写入
+                        {polar || implicit || parametric
+                          ? " a、k、b 等参数"
+                          : "任意单字母参数，如 k、m、θ"}
+                        ，
+                        <br />
+                        这里会自动出现参数滑块。
+                      </>
+                    )}
                   </p>
                 )}
               </div>
@@ -1133,7 +1317,11 @@ export default function App() {
             />
             <div className="graph-legend">
               {parsed
-                .filter((e) => e.visible && e.fn)
+                .filter(
+                  (e) =>
+                    e.visible &&
+                    (e.fn || (!polar && isOdeKind(e.kind) && e.ode?.solution)),
+                )
                 .map((e) => (
                   <span key={e.id}>
                     <i style={{ background: displayColor(e.color) }} />
@@ -1252,9 +1440,12 @@ export default function App() {
             <div className="eyebrow">QUICK START</div>
             <h2>你的第一幅函数图像</h2>
             <p>
-              在左栏“添加”旁选择显函数、隐函数或参数方程，再添加表达式。三种类型可叠加在同一张直角坐标画布，共用同名参数。隐函数输入完整等式（如
+              在左栏“添加”旁选择显函数、隐函数、参数方程、一阶微分方程或二阶常系数微分方程，再添加表达式。各类曲线可以叠加在同一张直角坐标画布。隐函数输入完整等式（如
               x²+y²=9）；参数方程分别输入 x(t)、y(t)，每条表达式下方独立设置 t
               范围。
+            </p>
+            <p>
+              微分方程同样用公式键盘输入，填写完整等式后点击“求解”。细线显示通解的积分曲线族；在同一张表达式卡片中填写初值，会突出对应的特解，也可调节曲线密度。二阶常系数方程需要同时填写函数值与初始斜率；右端项支持多项式、指数、正弦、余弦及它们的和与积。
             </p>
             <p>
               画布上方可以切换直角坐标与极坐标。极坐标输入 r =

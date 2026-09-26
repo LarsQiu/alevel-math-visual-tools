@@ -6,9 +6,10 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
+    "test:statistics": "node scripts/test-statistics.mjs",
     "test:workbench": "node --experimental-strip-types --test src/workbench/model.test.ts src/workbench/relations.test.ts",
     "test:mechanics": "node --experimental-strip-types --test src/mechanics.test.ts src/mechanics-solution.test.ts",
-    "test": "node --experimental-strip-types --test src/math.test.ts src/latex.test.ts src/polar.test.ts src/polarEquation.test.ts src/domainMarkers.test.ts src/polarPoints.test.ts src/theme.test.ts src/cartesian.test.ts src/analysis.test.ts src/cutAnalysis.test.ts src/exact.test.ts"
+    "test": "node --experimental-strip-types --test src/math.test.ts src/latex.test.ts src/polar.test.ts src/polarEquation.test.ts src/domainMarkers.test.ts src/polarPoints.test.ts src/theme.test.ts src/cartesian.test.ts src/analysis.test.ts src/cutAnalysis.test.ts src/exact.test.ts src/ode.test.ts src/odeLatex.test.ts src/odeSecondOrder.test.ts src/odeField.test.ts && npm run test:statistics"
   },
   "keywords": [],
   "author": "",

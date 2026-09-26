@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft,
   ChevronLeft,
   Copy,
   Download,
@@ -26,6 +25,7 @@ import {
 import { objectCatalog, glyphCSS } from "../mechanics-objects/art";
 import { StaticMath } from "../StaticMath";
 import { useColorTheme } from "../useColorTheme";
+import { WorkspaceBrand } from "../WorkspaceBrand";
 import { WorkbenchCanvas, type CanvasHandle } from "./WorkbenchCanvas";
 import { Miniature } from "./graphics";
 import {
@@ -482,13 +482,7 @@ export default function WorkbenchApp() {
     <div className="wb-app">
       <style>{glyphCSS}</style>
       <header className="wb-header">
-        <a href="/" className="wb-home" aria-label="返回数学探索室">
-          <ArrowLeft size={18} />
-        </a>
-        <div className="wb-brand">
-          <strong>力学实验台</strong>
-          <span>Mathroom · 装置搭建</span>
-        </div>
+        <WorkspaceBrand label="力学实验" />
         <div className="wb-header-links">
           <a href="/mechanics-objects.html">物体图鉴</a>
           <a href="/mechanics-demo.html">演化示例</a>

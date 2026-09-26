@@ -1,5 +1,23 @@
 /* Quiet paper-and-ink surfaces: hierarchy through spacing and fine rules. */
 :root {
+  color-scheme: light;
+  --font-ui:
+    "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    "Noto Sans CJK SC", sans-serif;
+  --font-brand: Georgia, "Times New Roman", serif;
+  --font-mono: "Cascadia Mono", Consolas, monospace;
+  --text-body: 13px;
+  --text-label: 12px;
+  --text-caption: 11px;
+  --text-section: 13px;
+  --weight-label: 500;
+  --weight-heading: 600;
+  --radius-control: 6px;
+  --radius-panel: 8px;
+  --control-height: 32px;
+  --field-height: 34px;
+  --workspace-header-height: 64px;
+  --control-motion: 140ms ease;
   --paper: #fbfaf6;
   --surface: #f4f4ef;
   --ink: #293740;
@@ -15,6 +33,9 @@
   --plot-label: #fffefaf2;
   --danger: #a64448;
   --success: #337462;
+  --chart-gold: #b08442;
+  --chart-blue: #527a98;
+  --chart-purple: #7b7294;
   --logo-bg: #46586c;
   --logo-fg: #fffefa;
   --overlay: #24333d42;
@@ -54,6 +75,9 @@
   --plot-label: #18242ef2;
   --danger: #e69a9d;
   --success: #88c3ac;
+  --chart-gold: #d7b477;
+  --chart-blue: #a1bed4;
+  --chart-purple: #b6a7cd;
   --logo-bg: #a9bdcc;
   --logo-fg: #17212b;
   --overlay: #060d17aa;
@@ -79,5 +103,20 @@
 }
 
 /* Shared controls and font for all Mathroom workspaces. */
-.theme-toggle { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border: 0; border-radius: 4px; background: transparent; color: var(--secondary-ink); cursor: pointer; }
-.theme-toggle:hover { background: var(--hover); color: var(--ink); }
+.theme-toggle {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-ink);
+  cursor: pointer;
+}
+.theme-toggle:hover {
+  background: var(--hover);
+  color: var(--ink);
+}

@@ -7,6 +7,9 @@ export default defineConfig({
       input: {
         main: "index.html",
         pure: "pure.html",
+        statistics: "statistics.html",
+        statisticsDemo: "statistics-demo.html",
+        ode: "ode.html",
         mechanics: "mechanics.html",
         mechanicsDemo: "mechanics-demo.html",
         objects: "mechanics-objects.html",
